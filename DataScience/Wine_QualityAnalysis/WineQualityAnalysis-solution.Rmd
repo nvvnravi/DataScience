@@ -1,0 +1,955 @@
+---
+title: "CSCI E-63C Week 7 midterm exam"
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+library(glmnet)
+library(leaps)
+library(ggplot2)
+library(MASS)
+library(dplyr)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+The goal of midterm is to apply some of the methods for supervised and unsupervised analysis to a new dataset.  We will work with data characterizing the relationship between wine quality and its analytical characteristics [available at UCI ML repository](https://archive.ics.uci.edu/ml/datasets/Wine+Quality) as well as in this course website on canvas.  The overall goal will be to use data modeling approaches to understand which wine properties influence the most wine quality as determined by expert evaluation.  The output variable in this case assigns wine to discrete categories between 0 (the worst) and 10 (the best), so that this problem can be formulated as classification or regression -- here we will stick to the latter and treat/model outcome as continuous variable.  For more details please see [dataset description available at UCI ML](https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality.names) or corresponding file in this course website on canvas.  Please note that there is another, much smaller, dataset on UCI ML also characterizing wine in terms of its analytical properties -- make sure to use correct URL as shown above, or, to eliminate possibility for ambiguity, the data available on the course website in canvas -- the correct dataset contains several thousand observations. For simplicity, clarity and to decrease your dependency on the network reliability and UCI ML availability you are advised to download data made available in this course website to your local folder and work with this local copy.
+
+There are two compilations of data available under the URL shown above as well as in the course website in canvas -- separate for red and for white wine -- please develop models of wine quality for each of them, investigate attributes deemed important for wine quality in both and determine whether quality of red and white wine is influenced predominantly by the same or different analytical properties (i.e. predictors in these datasets).  Lastly, as an exercise in unsupervised learning you will be asked to combine analytical data for red and white wine and describe the structure of the resulting data -- whether there are any well defined clusters, what subsets of observations they appear to represent, which attributes seem to affect the most this structure in the data, etc.
+
+Finally, as you will notice, the instructions here are terser than in the previous homework assignments. We expect that you use what you've learned in the class to complete the analysis and draw appropriate conclusions based on the data.  All approaches that you are expected to apply here have been exercised in the preceeding weekly assignments -- please feel free to consult your submissions and/or official solutions as to how they have applied to different datasets.  As always, if something appears to be unclear, please ask questions -- we may change to private mode those that in our opinion reveal too many details as we see fit.
+
+# Sub-problem 1: load and summarize the data (20 points)
+
+Download and read in the data, produce numerical and graphical summaries of the dataset attributes, decide whether they can be used
+for modeling in untransformed form or any transformations are justified, comment on correlation structure and whether some of the predictors suggest relationship with the outcome.
+
+##Answer:
+Briefly going through  the following links [http://onlinelibrary.wiley.com/doi/10.1002/9781118730720.fmatter/pdf] , [http://winefolly.com/review/understanding-acidity-in-wine/]
+and other literature online and with some basic knowledge we can hypohesize  the following about  main attributes that effect the quality of  wine.
+1. acidity (fixed acidity,volatle acidity, citric acid etc..)
+2. sugal levels (residual sugar)
+3. ph - This is a measure of acidity
+4. alochol (values-level)
+we will first look at the data. Remove null values. then  analyze single attribute and hwo each of them compare to quality and then we will perform pair wise analysis.
+
+```{r sub-p1}
+#Read sample data
+#wr- red wine
+#ww- white wine
+setwd("/Users/RaviRani/Documents/Harvard-Extension/CSCI E-63/midterm")
+wr<-read.table("winequality-red.csv",sep=";",header=TRUE)
+ww<-read.table("winequality-white.csv",sep=";",header=TRUE)
+#head of red wine & white wine
+head(wr)
+head(ww)
+# column names of white & red wine
+colnames(wr)
+colnames(ww)
+# Dimension of red & white wines before removing null values
+#dim(wr)
+#dim(ww)
+#convert to data frame
+# Created variables for log and sqrt transformation
+dfwr<-as.data.frame.matrix(wr) 
+dfww<-as.data.frame.matrix(ww)
+
+logdfwr<-as.data.frame.matrix(wr) 
+logdfww<-as.data.frame.matrix(ww)
+
+sqrtdfwr<-as.data.frame.matrix(wr) 
+sqrtdfww<-as.data.frame.matrix(ww)
+# check for null values  for both wines
+sum(is.na(dfwr))
+dfwr<-na.omit(dfwr)
+
+sum(is.na(dfww))
+dfww<-na.omit(dfww)
+
+dim(dfwr)
+dim(dfww)
+# check for null is done
+# untransformed
+summary(dfwr)
+
+# drawing distribution of all attributes for red wine
+par(mfrow=c(2,2), oma = c(1,1,0,0) + 0.1, mar = c(3,3,1,1) + 0.1)
+barplot((table(dfwr$quality)), col=c("DeepSkyBlue4", "DeepSkyBlue", "DeepSkyBlue1", "DeepSkyBlue2", "DeepSkyBlue3", "DeepSkyBlue4"))
+mtext("Quality", side=1, outer=F, line=2, cex=0.8)
+truehist(dfwr$fixed.acidity, h = 0.5, col="DeepSkyBlue")
+mtext("Fixed Acidity", side=1, outer=F, line=2, cex=0.8)
+truehist(dfwr$volatile.acidity, h = 0.05, col="DeepSkyBlue")
+mtext("Volatile Acidity", side=1, outer=F, line=2, cex=0.8)
+truehist(dfwr$citric.acid, h = 0.1, col="DeepSkyBlue")
+mtext("Citric Acid", side=1, outer=F, line=2, cex=0.8)
+
+par(mfrow=c(2,2), oma = c(1,1,0,0) + 0.1, mar = c(3,3,1,1) + 0.1)
+truehist(dfwr$residual.sugar, h = 0.5, col="DeepSkyBlue")
+mtext("Residual Sugar", side=1, outer=F, line=2, cex=0.8)
+truehist(dfwr$chlorides, h = 0.01, col="DeepSkyBlue")
+mtext("chlorides", side=1, outer=F, line=2, cex=0.8)
+truehist(dfwr$free.sulfur.dioxide, h = 0.05, col="DeepSkyBlue")
+mtext("free.sulfur.dioxide", side=1, outer=F, line=2, cex=0.8)
+truehist(dfwr$total.sulfur.dioxide, h = 0.1, col="DeepSkyBlue")
+mtext("total.sulfur.dioxide", side=1, outer=F, line=2, cex=0.8)
+
+par(mfrow=c(2,2), oma = c(1,1,0,0) + 0.1, mar = c(3,3,1,1) + 0.1)
+truehist(dfwr$density, h = 0.1, col="DeepSkyBlue")
+mtext("Density", side=1, outer=F, line=2, cex=0.8)
+truehist(dfwr$pH, h = 0.1, col="DeepSkyBlue")
+mtext("PH", side=1, outer=F, line=2, cex=0.8)
+truehist(dfwr$sulphates, h = 0.05, col="DeepSkyBlue")
+mtext("Sulpahtes", side=1, outer=F, line=2, cex=0.8)
+truehist(dfwr$alcohol, h = 0.1, col="DeepSkyBlue")
+mtext("alcohol", side=1, outer=F, line=2, cex=0.8)
+
+summary(dfww)
+# drawing distribution of all attributes for white wine
+par(mfrow=c(2,2), oma = c(1,1,0,0) + 0.1, mar = c(3,3,1,1) + 0.1)
+barplot((table(dfww$quality)), col=c("DeepSkyBlue4", "DeepSkyBlue", "DeepSkyBlue1", "DeepSkyBlue2", "DeepSkyBlue3", "DeepSkyBlue4"))
+mtext("Quality", side=1, outer=F, line=2, cex=0.8)
+truehist(dfww$fixed.acidity, h = 0.5, col="DeepSkyBlue")
+mtext("Fixed Acidity", side=1, outer=F, line=2, cex=0.8)
+truehist(dfww$volatile.acidity, h = 0.05, col="DeepSkyBlue")
+mtext("Volatile Acidity", side=1, outer=F, line=2, cex=0.8)
+truehist(dfww$citric.acid, h = 0.1, col="DeepSkyBlue")
+mtext("Citric Acid", side=1, outer=F, line=2, cex=0.8)
+
+par(mfrow=c(2,2), oma = c(1,1,0,0) + 0.1, mar = c(3,3,1,1) + 0.1)
+truehist(dfww$residual.sugar, h = 0.5, col="DeepSkyBlue")
+mtext("Residual Sugar", side=1, outer=F, line=2, cex=0.8)
+truehist(dfww$chlorides, h = 0.01, col="DeepSkyBlue")
+mtext("chlorides", side=1, outer=F, line=2, cex=0.8)
+truehist(dfww$free.sulfur.dioxide, h = 0.05, col="DeepSkyBlue")
+mtext("free.sulfur.dioxide", side=1, outer=F, line=2, cex=0.8)
+truehist(dfww$total.sulfur.dioxide, h = 0.1, col="DeepSkyBlue")
+mtext("total.sulfur.dioxide", side=1, outer=F, line=2, cex=0.8)
+
+par(mfrow=c(2,2), oma = c(1,1,0,0) + 0.1, mar = c(3,3,1,1) + 0.1)
+truehist(dfww$density, h = 0.1, col="DeepSkyBlue")
+mtext("Density", side=1, outer=F, line=2, cex=0.8)
+truehist(dfww$pH, h = 0.1, col="DeepSkyBlue")
+mtext("PH", side=1, outer=F, line=2, cex=0.8)
+truehist(dfww$sulphates, h = 0.05, col="DeepSkyBlue")
+mtext("Sulpahtes", side=1, outer=F, line=2, cex=0.8)
+truehist(dfww$alcohol, h = 0.1, col="DeepSkyBlue")
+mtext("alcohol", side=1, outer=F, line=2, cex=0.8)
+```
+
+#####Analysis of single attributes  of Red wine. 
+1.By looking at the summary data we can say that quality is pretty much normally distributes with most values either 5 or 6.
+fixed and volatile acidity also have a sort of  normal distribution
+citric acid is more uniform with a peak at the lower end
+
+residual.sugar shows that the distribution  nearly normal and somewhat right skewed.sulphates and So2 also show the same pattern
+
+pH and density distribution also show  normal distribution
+alcohol is not a normally distribute
+
+
+2.White wine analysis of attributes
+
+quality,fixed acidity,volatile acidity and citric acid are same as for the red wine.
+residual sugars and chlorides are rightly skewed. So2 values are somewhat normal.
+density seem to have a lot outliers.
+PH is normally distributed
+
+
+
+```{r}
+#Boxplots of attributes for red wine
+par(mfrow=c(1,6), oma = c(1,1,0,0) + 0.1,  mar = c(3,3,1,1) + 0.1)
+boxplot(dfwr$fixed.acidity,  pch=19)
+mtext("Fixed Acidity", cex=0.8, side=1, line=2)
+boxplot(dfwr$volatile.acidity,  pch=19)
+mtext("volatile.acidity", cex=0.8, side=1, line=2)
+boxplot(dfwr$citric.acid,  pch=19)
+mtext("citric.acid", cex=0.8, side=1, line=2)
+boxplot(dfwr$residual.sugar,  pch=19)
+mtext("residual.sugar", cex=0.8, side=1, line=2)
+boxplot(dfwr$chlorides,  pch=19)
+mtext("chlorides", cex=0.8, side=1, line=2)
+boxplot(dfwr$free.sulfur.dioxide,  pch=19)
+mtext("free.sulfur.dioxide", cex=0.8, side=1, line=2)
+par(mfrow=c(1,5), oma = c(1,1,0,0) + 0.1,  mar = c(3,3,1,1) + 0.1)
+boxplot(dfwr$total.sulfur.dioxide,  pch=19)
+mtext("total.sulfur.dioxide", cex=0.8, side=1, line=2)
+boxplot(dfwr$density,  pch=19)
+mtext("Density", cex=0.8, side=1, line=2)
+boxplot(dfwr$pH,  pch=19)
+mtext("PH", cex=0.8, side=1, line=2)
+boxplot(dfwr$sulphates,  pch=19)
+mtext("Sulphates", cex=0.8, side=1, line=2)
+boxplot(dfwr$alcohol,  pch=19)
+mtext("Alcohol", cex=0.8, side=1, line=2)
+boxplot(dfwr$quality,  pch=19)
+mtext("Quality", cex=0.8, side=1, line=2)
+
+#Boxplots of attributes for red wine
+par(mfrow=c(1,6), oma = c(1,1,0,0) + 0.1,  mar = c(3,3,1,1) + 0.1)
+boxplot(dfww$fixed.acidity,  pch=19)
+mtext("Fixed Acidity", cex=0.8, side=1, line=2)
+boxplot(dfww$volatile.acidity,  pch=19)
+mtext("volatile.acidity", cex=0.8, side=1, line=2)
+boxplot(dfww$citric.acid,  pch=19)
+mtext("citric.acid", cex=0.8, side=1, line=2)
+boxplot(dfww$residual.sugar,  pch=19)
+mtext("residual.sugar", cex=0.8, side=1, line=2)
+boxplot(dfww$chlorides,  pch=19)
+mtext("chlorides", cex=0.8, side=1, line=2)
+boxplot(dfww$free.sulfur.dioxide,  pch=19)
+mtext("free.sulfur.dioxide", cex=0.8, side=1, line=2)
+par(mfrow=c(1,5), oma = c(1,1,0,0) + 0.1,  mar = c(3,3,1,1) + 0.1)
+boxplot(dfww$total.sulfur.dioxide,  pch=19)
+mtext("total.sulfur.dioxide", cex=0.8, side=1, line=2)
+boxplot(dfww$density,  pch=19)
+mtext("Density", cex=0.8, side=1, line=2)
+boxplot(dfww$pH,  pch=19)
+mtext("PH", cex=0.8, side=1, line=2)
+boxplot(dfww$sulphates,  pch=19)
+mtext("Sulphates", cex=0.8, side=1, line=2)
+boxplot(dfww$alcohol,  pch=19)
+mtext("Alcohol", cex=0.8, side=1, line=2)
+boxplot(dfww$quality,  pch=19)
+mtext("Quality", cex=0.8, side=1, line=2)
+```
+
+It looks like by looking at the box plots above there are outliers in almost all the attributes . 
+
+```{r}
+#correlations
+signif(cor(wr[,colnames(wr)]),3)
+signif(cor(ww[,colnames(ww)]),3)
+```
+
+#####Analysis of correlation of attributes red wine
+1.fixed acidity has a strong correlation with citric acid which seems natural and citric acid is acidic.
+2.one thing to note is the strong relationship between density and fixed acidity.
+3.it has a negative correlation with Ph which is strange because a acidic solutions have large PH values.
+4.The variables most strongly correlated to quality are Volatile Acidity and Alcohol. citric acid and sulphates also has not so strong correlation.
+5.Alcohol has negative correlation with density.
+
+#####Analysis of correlation of attributes white wine
+1.fixed acidity has a strong correlation with citric acid which seems natural and citric acid is acidic.
+2.one thing to note is the strong relationship between density and fixed acidity.
+3.it has a negative correlation with Ph which is strange because a acidic solutions have large PH values.
+4.The variables most strongly correlated to quality are chlorides (-ive),density(-ive) and Alcohol(+ive). citric acid and sulphates also has not so strong correlation.
+5.Alcohol has negative correlation with density.
+
+Now creating box plots of red wine attributes against quality to see how they trend
+
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = fixed.acidity)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = volatile.acidity)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = citric.acid)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = residual.sugar)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = chlorides)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = free.sulfur.dioxide)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = total.sulfur.dioxide)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = density)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = pH)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = sulphates)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfwr, aes(x = quality, y = alcohol)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+Now creating box plots of white wine attributes against quality to see how they trend 
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = fixed.acidity)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = volatile.acidity)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = citric.acid)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = residual.sugar)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = chlorides)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = free.sulfur.dioxide)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = total.sulfur.dioxide)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = density)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = pH)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = sulphates)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+```{r }
+ggplot(data = dfww, aes(x = quality, y = alcohol)) +
+  geom_jitter( alpha = .3) +
+  geom_boxplot(alpha = .1,color = 'blue') +
+  stat_summary(fun.y = "mean",  geom = "point", color = "red", shape = 8, size = 4)
+```
+
+##### Red wine Analysis
+
+Fixed Acidity has almost no effect on the Quality.
+
+Volatile acid seems to have a negative impact on the quality 
+
+more Citric acid more good quality wine
+
+residual sugar has no effect on quality
+
+weak correlation of chlorides with quality.lower values of Chlorides produce good quality wines.
+
+high values of so2 produce better wine then low values of so2
+
+total so2 has same result as above
+
+density has definitely effecting the quality of wine though -ively
+
+PH values also effect quality low PH values better quality although if it is very low quality dereases
+
+sulphates and alcohol has +ive correlation with quality they both increase with quality
+ 
+
+##### White wine analysis
+ 
+ all the attributes are showing same behavior as red wine except the following:
+
+ Volatile acid has no effect on the quality 
+
+ similarly citric acid has no effect
+
+ PH has a weak relationship with white wine quality
+
+ sulphates has no effect on quality
+
+
+
+```{r}
+#Pairs of untransformed attributes
+pairs(dfwr);
+pairs(dfww);
+
+#summary of untransformed linear regression
+mwr<-lm(quality~fixed.acidity+volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+pH+sulphates+alcohol,dfwr)
+summary(mwr)
+mww<-lm(quality~fixed.acidity+volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+pH+sulphates+alcohol,dfww)
+summary(mww)
+
+# Log Transformed
+#summary of untransformed linear regression
+cols <- c("fixed.acidity","volatile.acidity","citric.acid","residual.sugar","chlorides","free.sulfur.dioxide","total.sulfur.dioxide","density","pH","sulphates","alcohol","quality")
+logdfwr[cols] <- log(dfwr[cols]+1)
+logdfww[cols] <- log(dfww[cols]+1)
+summary(logdfwr)
+summary(logdfww)
+
+#correlations
+signif(cor(logdfwr[,colnames(wr)]),3)
+signif(cor(logdfww[,colnames(ww)]),3)
+
+mwr<-lm(quality~fixed.acidity+volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+density+pH+sulphates+alcohol,logdfwr)
+summary(mwr)
+mww<-lm(quality~fixed.acidity+volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+density+pH+sulphates+alcohol,logdfww)
+summary(mww)
+#Pairs of log transformed
+pairs(logdfwr);
+pairs(logdfww);
+
+# square Transformed
+cols <- c("fixed.acidity","volatile.acidity","citric.acid","residual.sugar","chlorides","free.sulfur.dioxide","total.sulfur.dioxide","density","pH","sulphates","alcohol","quality")
+sqrtdfwr[cols] <- sqrt(dfwr[cols]+1)
+sqrtdfww[cols] <- sqrt(dfww[cols]+1)
+summary(sqrtdfwr)
+summary(sqrtdfww)
+
+#correlations
+signif(cor(sqrtdfwr[,colnames(wr)]),3)
+signif(cor(sqrtdfww[,colnames(ww)]),3)
+
+mwr<-lm(quality~fixed.acidity+volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+density+pH+sulphates+alcohol,sqrtdfwr)
+summary(mwr)
+mww<-lm(quality~fixed.acidity+volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+density+pH+sulphates+alcohol,sqrtdfww)
+summary(mww)
+#Pairs of sqrt transformed
+pairs(logdfwr);
+pairs(logdfww);
+
+```
+
+
+The summary of liner regression for untrsnsformed , log transformed and sqrt trandformed are having almost the same  R^2 but the RSE is lowest for the log transformed dataset. so it is better to consider log transformed dataset.
+by analyzing the data the following attributes can be considered as potentials predictors for red wine in increasing order of the correlation:
+1. alcohol
+2. volatile.acidity
+3. sulphates
+4.citrix.acid
+
+For white wine following are the attributes
+1.volatile.acidity
+2.chlorides
+3.alcohol
+
+Regarding paiwaise we se strong corelation between Ph and fixed.acidity . Similarly there is one between total.sulfur.dioxide and free.sulfur.dioxide.
+
+In order to show the corrleation between the pairs and the predictors we are drawing correlation matrix specific for them
+
+```{r}
+#for red wine  we will draw correlation between quality and  alcohol,volatile.acidity,sulphates
+ggplot(logdfwr,aes(x=quality,y=alcohol)) +  geom_point() + geom_smooth(method = "lm", se = FALSE)
+ggplot(logdfwr,aes(x=quality,y=sulphates)) +  geom_point() + geom_smooth(method = "lm", se = FALSE)
+ggplot(logdfwr,aes(x=quality,y=volatile.acidity)) +  geom_point() + geom_smooth(method = "lm", se = FALSE)
+#for white wine  we will draw correlation between quality and  alcohol,volatile.acidity,sulphates
+ggplot(logdfww,aes(x=quality,y=volatile.acidity)) +  geom_point() + geom_smooth(method = "lm", se = FALSE)
+ggplot(logdfww,aes(x=quality,y=alcohol)) +  geom_point() + geom_smooth(method = "lm", se = FALSE)
+ggplot(logdfww,aes(x=quality,y=chlorides)) +  geom_point() + geom_smooth(method = "lm", se = FALSE)
+```
+
+# Sub-problem 2: choose optimal models by exhaustive, forward and backward selection (20 points)
+
+Use `regsubsets` from library `leaps` to choose optimal set of variables for modeling wine quality for red and white wine (separately), describe differences and similarities between attributes deemed important in each case.
+
+```{r sub-p2}
+#Redwine
+summary(regsubsets(quality ~ .,logdfwr,method="exhaustive"))
+summary(regsubsets(quality ~ .,logdfwr,method="backward"))
+summary(regsubsets(quality ~ . ,logdfwr,method="forward"))
+summary(regsubsets(quality ~ .,logdfwr,method="seqrep"))
+summary(regsubsets(quality ~ .,logdfwr,method="seqrep"))$which
+plot(regsubsets(quality ~ .,logdfwr))
+
+summaryMetrics <-  NULL
+whichAll <- list()
+
+for ( myMthd in c("exhaustive", "backward", "forward") ) {
+  rsRes <- regsubsets(quality~.,logdfwr,method=myMthd,nvmax=11)
+  summRes <- summary(rsRes)
+  whichAll[[myMthd]] <- summRes$which
+  for ( metricName in c("rsq","rss","adjr2","cp","bic") ) {
+    summaryMetrics <- rbind(summaryMetrics,
+      data.frame(method=myMthd,metric=metricName,
+                nvars=1:length(summRes[[metricName]]),
+                value=summRes[[metricName]]))
+  }
+}
+ggplot(summaryMetrics,aes(x=nvars,y=value,shape=method,colour=method)) + geom_path() + geom_point() + facet_wrap(~metric,scales="free") +   theme(legend.position="top")
+
+old.par <- par(mfrow=c(2,2),ps=16,mar=c(5,7,2,1))
+for ( myMthd in names(whichAll) ) {
+  image(1:nrow(whichAll[[myMthd]]),
+        1:ncol(whichAll[[myMthd]]),
+        whichAll[[myMthd]],xlab="N(vars)",ylab="",
+        xaxt="n",yaxt="n",breaks=c(-0.5,0.5,1.5),
+        col=c("white","gray"),main=myMthd)
+  axis(1,1:nrow(whichAll[[myMthd]]),rownames(whichAll[[myMthd]]))
+  axis(2,1:ncol(whichAll[[myMthd]]),colnames(whichAll[[myMthd]]),las=2)
+}
+#white wine
+summary(regsubsets(quality ~ .,logdfww,method="exhaustive"))
+summary(regsubsets(quality ~ .,logdfww,method="backward"))
+summary(regsubsets(quality ~ . ,logdfww,method="forward"))
+summary(regsubsets(quality ~ .,logdfww,method="seqrep"))
+summary(regsubsets(quality ~ .,logdfww,method="seqrep"))$which
+plot(regsubsets(quality ~ .,logdfww))
+summaryMetrics <-  NULL
+whichAll <- list()
+for ( myMthd in c("exhaustive", "backward", "forward") ) {
+  rsRes <- regsubsets(quality~.,logdfww,method=myMthd,nvmax=11)
+  summRes <- summary(rsRes)
+  whichAll[[myMthd]] <- summRes$which
+  for ( metricName in c("rsq","rss","adjr2","cp","bic") ) {
+    summaryMetrics <- rbind(summaryMetrics,
+      data.frame(method=myMthd,metric=metricName,
+                nvars=1:length(summRes[[metricName]]),
+                value=summRes[[metricName]]))
+  }
+}
+ggplot(summaryMetrics,aes(x=nvars,y=value,shape=method,colour=method)) + geom_path() + geom_point() + facet_wrap(~metric,scales="free") +   theme(legend.position="top")
+old.par <- par(mfrow=c(2,2),ps=16,mar=c(5,7,2,1))
+for ( myMthd in names(whichAll) ) {
+  image(1:nrow(whichAll[[myMthd]]),
+        1:ncol(whichAll[[myMthd]]),
+        whichAll[[myMthd]],xlab="N(vars)",ylab="",
+        xaxt="n",yaxt="n",breaks=c(-0.5,0.5,1.5),
+        col=c("white","gray"),main=myMthd)
+  axis(1,1:nrow(whichAll[[myMthd]]),rownames(whichAll[[myMthd]]))
+  axis(2,1:ncol(whichAll[[myMthd]]),colnames(whichAll[[myMthd]]),las=2)
+}
+```
+
+  All model’s performance are same for all the 11 variables except for the "bic" graph where the variables tend to go up a little bit. 
+
+#####Red Wine Analysis
+
+  But from the diagrams above including the which attribute of the summary,there are 6 variables which appear to be optimal 
+out of which 3 (alcohol,volatile.acidity,sulpahtes) are more optimal than the other 3(chloride,ph,total SO2).we can see them as they form a kind of straight line towards the end of the curve line.
+
+  The 6 variables are :
+  alcohol- This was expected all through the analysis starting from subproblem above. This value seem logical as people buy wine because of alcohol 
+present in them. The more the alcohol quantity the better the quality
+
+  sulphate - This is also adding values to the total SO2 variable - sulphur dioxide and it is used to protect the wine. 
+wich acts as an antimicrobial and antioxidant.There are many misnomers around how much quantity is optimal in wine.
+
+  Volatile acid - This comes from acetic acid created by bacteria in wine. since acid is directly related to PH values . PH value is also one of the variables
+chloride - This variable didn't came up during analysis in subproblem above. according to the literature online [http://www.scielo.br/scielo.php?script=sci_arttext&pid=S0101-20612015000100095}
+  specifically red wine contains chloride and gives a salty taste to the wine.
+
+#####white wine Analysis
+
+we can see a total of 6 optimal variuables out which 3 are best optimal variables.
+alcohol,volatile acidic and free SO2.
+This is followed by residual sugar,density, and sulphates
+
+alcohol,sulphates,volatile acidic are descrbed above for redwine and hold the same reasoning for white wine also.
+residual sugar -Total sulfur dioxide and level of residual sugar are positively correlated. Correlation shows higher value with white wine.
+White wine density and residual sugar level have positive correlation.
+Alcohol level of white wine decreases with the growth of residual sugar level
+
+SO2 = can be explained by the involvement of sulphates variable
+density - This is unexpected based on analysis done in subproblem above.
+The density seems to be correlated with the residual sugar and with the alcohol whcih in turn determine the quality .
+ 
+
+
+
+# Sub-problem 3: optimal model by cross-validation (25 points)
+
+Use cross-validation (or any other resampling strategy of your choice) to estimate test error for models with different numbers of variables.  Compare and comment on the number of variables deemed optimal by resampling versus those selected by `regsubsets` in the previous task.  Compare resulting models built separately for red and white wine data.
+
+
+```{r warning=FALSE }
+#red wine
+predict.regsubsets <- function (object, newdata, id, ...){
+  form=as.formula(object$call [[2]])
+  mat=model.matrix(form,newdata)
+  coefi=coef(object,id=id)
+  xvars=names (coefi)
+  mat[,xvars] %*% coefi
+}
+dfTmp <- NULL
+whichSum <- array(0,dim=c(11,12,4), 
+  dimnames=list(NULL,colnames(model.matrix(quality ~ .,logdfwr)),
+                c("exhaustive", "backward", "forward", "seqrep")))
+# Split data into training and test 50 times:
+nTries <- 30
+for ( iTry in 1:nTries ) {
+  bTrain <- sample(rep(c(TRUE,FALSE),length.out=nrow(logdfwr)))
+  # Try each method available in regsubsets
+  # to select the best model of each size:
+  for ( jSelect in c("exhaustive", "backward", "forward", "seqrep") ) {
+    rsTrain <- regsubsets(quality ~ .,logdfwr[bTrain,],method=jSelect,nvmax=11)
+    # Add up variable selections:
+    
+    whichSum[,,jSelect] <- whichSum[,,jSelect] + summary(rsTrain)$which
+    
+    # Calculate test error for each set of variables
+    # using predict.regsubsets implemented above:
+    for ( kVarSet in 1:11 ) {
+      # make predictions:
+      testPred <- predict(rsTrain,logdfwr[!bTrain,],id=kVarSet)
+      # calculate MSE:
+      mseTest <- mean((testPred-logdfwr[!bTrain,"quality"])^2)
+      # add to data.frame for future plotting:
+      dfTmp <- rbind(dfTmp,data.frame(sim=iTry,sel=jSelect,vars=kVarSet,
+      mse=c(mseTest,summary(rsTrain)$rss[kVarSet]/sum(bTrain)),trainTest=c("test","train")))
+    }
+  }
+}
+# plot MSEs by training/test, number of 
+# variables and selection method:
+ggplot(dfTmp,aes(x=factor(vars),y=mse,colour=sel)) + geom_boxplot()+facet_wrap(~trainTest)
+
+
+
+## k-fold cross validation (10 fold)
+#method for predict
+#now we perform best subset selection on the full data set, and select the best ten-variable model. 
+regfit.best=regsubsets(quality~.,data=logdfwr ,nvmax=12,,really.big=T)
+coef(regfit.best ,11)
+#partitions
+k=10
+set.seed(1)
+folds=sample(1:k,nrow(logdfwr),replace=TRUE)
+
+cv.errors=matrix(NA,k,11, dimnames=list(NULL, paste(1:11)))
+for(j in 1:k){
+best.fit = regsubsets ( quality ~ . , data=logdfwr [ folds  != j , ],nvmax=12)
+    for(i in 1:11){
+    pred<-predict(best.fit,logdfwr[folds==j,],id=i)
+    
+    cv.errors[j,i]=mean( (logdfwr$quality[folds==j]-pred)^2)
+    }
+  }
+mean.cv.errors=apply(cv.errors ,2,mean)
+mean.cv.errors
+par(mfrow=c(1,1))
+plot(mean.cv.errors ,type="b")
+
+
+# white wine
+
+dfTmp <- NULL
+whichSum <- array(0,dim=c(11,12,4), 
+  dimnames=list(NULL,colnames(model.matrix(quality ~ .,logdfww)),
+                c("exhaustive", "backward", "forward", "seqrep")))
+# Split data into training and test 50 times:
+nTries <- 30
+for ( iTry in 1:nTries ) {
+  bTrain <- sample(rep(c(TRUE,FALSE),length.out=nrow(logdfww)))
+  # Try each method available in regsubsets
+  # to select the best model of each size:
+  for ( jSelect in c("exhaustive", "backward", "forward", "seqrep") ) {
+    rsTrain <- regsubsets(quality ~ .,logdfww[bTrain,],method=jSelect,nvmax=11)
+    # Add up variable selections:
+    
+    whichSum[,,jSelect] <- whichSum[,,jSelect] + summary(rsTrain)$which
+    
+    # Calculate test error for each set of variables
+    # using predict.regsubsets implemented above:
+    for ( kVarSet in 1:11 ) {
+      # make predictions:
+      testPred <- predict(rsTrain,logdfww[!bTrain,],id=kVarSet)
+      # calculate MSE:
+      mseTest <- mean((testPred-logdfww[!bTrain,"quality"])^2)
+      # add to data.frame for future plotting:
+      dfTmp <- rbind(dfTmp,data.frame(sim=iTry,sel=jSelect,vars=kVarSet,
+      mse=c(mseTest,summary(rsTrain)$rss[kVarSet]/sum(bTrain)),trainTest=c("test","train")))
+    }
+  }
+}
+# plot MSEs by training/test, number of 
+# variables and selection method:
+ggplot(dfTmp,aes(x=factor(vars),y=mse,colour=sel)) + geom_boxplot()+facet_wrap(~trainTest)
+
+## k-fold cross validation (10 fold)
+#method for predict
+#now we perform best subset selection on the full data set, and select the best ten-variable model. 
+regfit.best=regsubsets(quality~.,data=logdfww ,nvmax=12,really.big=T)
+coef(regfit.best ,11)
+#partitions
+k=10
+set.seed(1)
+folds=sample(1:k,nrow(logdfww),replace=TRUE)
+
+cv.errors=matrix(NA,k,11, dimnames=list(NULL, paste(1:11)))
+for(j in 1:k){
+best.fit = regsubsets ( quality ~ . , data=logdfww [ folds  != j , ],nvmax=12)
+    for(i in 1:11){
+    pred<-predict(best.fit,logdfww[folds==j,],id=i)
+    
+    cv.errors[j,i]=mean( (logdfww$quality[folds==j]-pred)^2)
+    }
+  }
+mean.cv.errors=apply(cv.errors ,2,mean)
+mean.cv.errors
+par(mfrow=c(1,1))
+plot(mean.cv.errors ,type="b")
+
+```
+
+#####common observations :
+
+The test data and trained data behave almost identically. we can say that the mode size if 5 as the last 5 boxplots are almost constant.
+
+By looking at the graph it looks like all the four methods yield models of very comparable performance for both the wines. There is a difference in terms of RSE box plot graphs because redwine has significanty less number of observations than white wine.
+ 
+ 
+#####red wine observations: 
+ 
+ Error rate is more with test data than the training which could  that the process is 
+ 
+ moving towards a optimal subset of variables in case of red wine.This should also be related to the number of observations.
+ 
+ density,ph,sulphates and alcohol are seem to be the main predictors. with ph & alcohol to be mre optimal than the other 2.
+In problem 2 above we had alcohol,volatile.acidity,sulphates as predictor variables.
+ 
+##### white wine observations:
+ 
+ for white wine there is not much difference test data and training data.
+ 
+like red wine white wine also has the same variables as optimal variable overall but density & sulphate are more optimal than the others.
+
+in problem 2 we had alcohol,volatile acidic and free SO2 as optimal variables . so there is a difference for optimal variables in both the cases
+ 
+ 
+# Sub-problem 4: lasso/ridge (25 points)
+
+Use regularized approaches (i.e. lasso and ridge) to model quality of red and white wine (separately).  Compare resulting models (in terms of number of variables and their effects) to those selected in the previous two tasks (by `regsubsets` and resampling), comment on differences and similarities among them. 
+
+```{r lasso-redwine}
+
+xl <- model.matrix(quality~.,logdfwr)[,-1]
+head(xl)
+yl <- logdfwr[,"quality"]
+mylassoRes <- glmnet(scale(xl),yl,alpha=1)
+plot(mylassoRes,label=TRUE)
+mycvLassoRes <- cv.glmnet(scale(xl),yl,alpha=1)
+plot(mycvLassoRes)
+#log (lambda)
+mycvLassoRes <- cv.glmnet(scale(xl),yl,alpha=1,lambda=10^((-120:0)/20))
+plot(mycvLassoRes)
+
+#log (large lambda)
+mycvLassoRes <- cv.glmnet(scale(xl),yl,alpha=1,lambda=10^((-120:0)/10))
+plot(mycvLassoRes)
+
+#log (large lambda)
+mycvLassoRes <- cv.glmnet(scale(xl),yl,alpha=1,lambda=10^((-10:5)/5))
+plot(mycvLassoRes)
+
+predict(mylassoRes,type="coefficients",s=mycvLassoRes$lambda.1se)
+predict(mylassoRes,type="coefficients",s=mycvLassoRes$lambda.min)
+
+mylassoResScaled <- glmnet(scale(xl),yl,alpha=1)
+mycvLassoResScaled <- cv.glmnet(scale(xl),yl,alpha=1)
+predict(mylassoResScaled,type="coefficients",s=mycvLassoResScaled$lambda.1se)
+
+```
+
+ For red wine by using lasso - looking at cofficients we can see that 3 variables are supposed to be good predictors (volatile.acidity,sulphates & alcohol) which is exactly matching with the analysis of red wine in subproblem 2 above.
+
+```{r ridge-redwine}
+myridgeRes <- glmnet(scale(xl),yl,alpha=0)
+plot(myridgeRes,label=TRUE)
+mycvRidgeRes <- cv.glmnet(scale(xl),yl,alpha=0)
+plot(mycvRidgeRes)
+mycvRidgeRes$lambda.min
+mycvRidgeRes$lambda.1se
+predict(myridgeRes,type="coefficients",s=mycvRidgeRes$lambda.min)
+predict(myridgeRes,type="coefficients",s=mycvRidgeRes$lambda.1se)
+mycvRidgeRes <- cv.glmnet(scale(xl),yl,alpha=0,lambda=10^((-80:80)/20))
+plot(mycvRidgeRes)
+mycvRidgeRes <- cv.glmnet(scale(xl),yl,alpha=0,lambda=10^((-80:80)/5))
+plot(mycvRidgeRes)
+myridgeResScaled <- glmnet(scale(xl),yl,alpha=0)
+mycvRidgeResScaled <- cv.glmnet(scale(xl),yl,alpha=0)
+predict(myridgeResScaled,type="coefficients",s=mycvRidgeResScaled$lambda.1se)
+
+```
+
+ For ridge regression red wine -It still somewhat shows the same result as lasso but the best fit in this case is for all 11 attributes.
+
+
+```{r lasso-whitewine}
+xl <- model.matrix(quality~.,logdfww)[,-1]
+head(xl)
+yl <- logdfww[,"quality"]
+mylassoRes <- glmnet(scale(xl),yl,alpha=1)
+plot(mylassoRes,label=TRUE)
+mycvLassoRes <- cv.glmnet(scale(xl),yl,alpha=1)
+plot(mycvLassoRes)
+#log (lambda)
+mycvLassoRes <- cv.glmnet(scale(xl),yl,alpha=1,lambda=10^((-120:0)/20))
+plot(mycvLassoRes)
+
+#log (large lambda)
+mycvLassoRes <- cv.glmnet(scale(xl),yl,alpha=1,lambda=10^((-120:0)/10))
+plot(mycvLassoRes)
+
+#log (large lambda)
+mycvLassoRes <- cv.glmnet(scale(xl),yl,alpha=1,lambda=10^((-10:5)/5))
+plot(mycvLassoRes)
+
+predict(mylassoRes,type="coefficients",s=mycvLassoRes$lambda.1se)
+predict(mylassoRes,type="coefficients",s=mycvLassoRes$lambda.min)
+
+mylassoResScaled <- glmnet(scale(xl),yl,alpha=1)
+mycvLassoResScaled <- cv.glmnet(scale(xl),yl,alpha=1)
+predict(mylassoResScaled,type="coefficients",s=mycvLassoResScaled$lambda.1se)
+```
+
+
+ For Lasso regression white wine shows that the good predictors are volatile.acidity,residual.sugar,free.sulfur.dioxide and alcohol  which is little different than the  subproblem 2 above
+
+
+```{r ridge-whitewine}
+myridgeRes <- glmnet(scale(xl),yl,alpha=0)
+plot(myridgeRes,label=TRUE)
+mycvRidgeRes <- cv.glmnet(scale(xl),yl,alpha=0)
+plot(mycvRidgeRes)
+mycvRidgeRes$lambda.min
+mycvRidgeRes$lambda.1se
+predict(myridgeRes,type="coefficients",s=mycvRidgeRes$lambda.min)
+predict(myridgeRes,type="coefficients",s=mycvRidgeRes$lambda.1se)
+mycvRidgeRes <- cv.glmnet(scale(xl),yl,alpha=0,lambda=10^((-80:80)/20))
+plot(mycvRidgeRes)
+mycvRidgeRes <- cv.glmnet(scale(xl),yl,alpha=0,lambda=10^((-80:80)/5))
+plot(mycvRidgeRes)
+myridgeResScaled <- glmnet(scale(xl),yl,alpha=0)
+mycvRidgeResScaled <- cv.glmnet(scale(xl),yl,alpha=0)
+predict(myridgeResScaled,type="coefficients",s=mycvRidgeResScaled$lambda.1se)
+```
+
+
+  For Ridge regression white wine has still volatile.acidity,density,residual-sugar,alcohol as good predictors  but according the lambda diagrams above we can see that all 11 variables are needed to  get optimal lambda value which is not same as lasse regression and is not also not agreeging with the findings of subproblem 2 & 3 above
+
+
+# Sub-problem 5: PCA (10 points)
+
+Merge data for red and white wine (function `rbind` allows merging of two matrices/data frames with the same number of columns) and plot data projection to the first two principal components (e.g. biplot or similar plots).  Does this representation suggest presence of clustering structure in the data?  Does wine type (i.e. red or white) or quality appear to be associated with different regions occupied by observations in the plot? Please remember *not* to include quality attribute or wine type (red or white) indicator in your merged data, otherwise, apparent association of quality or wine type with PCA layout will be influenced by presence of those indicators in your data.
+
+```{r sub-p5}
+#Merge the 2 wines and perform initial study of data 
+comwine<-rbind(logdfwr[,-12],logdfww[,-12])
+dim(comwine)
+head(comwine)
+colnames(comwine)
+pca.out<-prcomp(comwine,scale=TRUE)
+plot(pca.out)
+biplot(pca.out,scale=TRUE)
+
+
+
+
+
+```
+
+PCA analysis
+
+By looking at the biplot we dont see any presence of clustering. all the data points are concentrated in the center
+
+PC1 places more importance to citric acid, SO2,alcohol & quality
+
+PC2 places more importance to density,chlorides and volatile acidity
+both do not give importance to PH value. 
+
+quality of wine appears to be associated more to PC1.
+
+By the row numbers displayed in the biplot we can see that the wine types are spread across out mostly but closely looking we see that white wine data it looks like  densities, chlorides ,sulphides , ph values and residual sugar determine white wne where as density chlorides determine red wine. which is slightly different than the abpve analysis.
+
+
+# Extra 10 points: model wine quality using principal components
+
+Compute PCA representation of the data for one of the wine types (red or white) *excluding wine quality attribute* (of course!). Use resulting principal components (slot `x` in the output of `prcomp`) as new predictors to fit a linear model of wine quality as a function of these predictors.  Compare resulting fit (in terms of MSE, r-squared, etc.) to those obtained above.  Comment on the differences and similarities between these fits.
+
+```{r ep}
+#modelling the wine quality using prncipal components for red wine.
+pca.out<-prcomp(logdfwr[,-12],scale=TRUE)
+summary(pca.out)
+plot(pca.out)
+biplot(pca.out,scale=TRUE)
+pca.out$x[1:10,]
+
+mww<-lm(logdfwr$quality ~ PC1+PC2+PC3+PC4+PC5+PC6+PC7+PC8+PC9+PC10+PC11,as.data.frame.matrix(pca.out$x))
+summary(mww)
+```
+
+
+ Comparing the model of red wine using principal components with log transformed of red wine we can see that both  RSE and RS^2 are having the same values.
+  Although the slopes of the coefficients change which could be because PC1 is a high variance values.
+ From the the summary above, we can undersand PC1 explains 29% of variance and PC2 explains 18% and so on.
+ 
+ 
