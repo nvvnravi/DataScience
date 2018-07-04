@@ -1,0 +1,734 @@
+---
+title: 'CSCI E-63C: Final Exam'
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(arm)
+library(ISLR)
+library(e1071)
+library(knncat)
+library(Amelia)
+library(class)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache=TRUE)
+options(scipen=999)
+options(warn=-1)
+```
+
+# Preface
+
+For the final exam/project we will develop classification models using several approaches and compare their performance on a new dataset -- so-called "Census Income" from UCI ML.  It is available at UCI ML web site, but so that we are not at the mercy of UCI ML availability, there is also a local copy of it in our website in Canvas as a zip-archive of all associated files.  Among other things, the description for this dataset also presents performance (prediction accuracy) observed by the dataset providers using variety of modeling techniques -- this supplies a context for the errors of the models we will develop here.
+
+Please note that the original data has been split up into training and test subsets, but there doesn't seem to be anything particular about that split, so we might want to pool those two datasets together and split them into training and test as necessary ourselves. As you do that, please check that the attribute levels are consistent between those two files.  For instance, the categorized income levels are indicated using slightly different notation in their training and test data.   By now it should be quite straightforward for you to correct that when you pool them together.
+
+Also, please note that there is non-negligible number of rows with missing values that for most analyses cannot be included without modification in the computation.  Please decide how you want to handle them and proceed accordingly.  The simplest and perfectly acceptable approach would be to exclude those observations from the rest of the analyses, but if you have time and inclination to investigate the impact of imputing them by various means, you are welcome to try.
+
+Attribute called "final weight" in the dataset description represents demographic weighting of these observations.  Please disregard it for the purposes of this assignment.
+
+Additionally, several attributes in this dataset are categorical variables with more than two levels (e.g. native country, occupation, etc.).  Please make sure to translate them into corresponding sets of dummy indicator variables for the methods that require such conversion (e.g. PCA) -- R function `model.matrix` can be convenient for this, instead of generating those 0/1 indicators for each level of the factor manually (which is still perfectly fine).  Some of those multi-level factors contain very sparsely populated categories -- e.g. occupation "Armed-Forces" or work class "Never-worked" -- it is your call whether you want to keep those observations in the data or exclude also on the basis that there is not enough data to adequately capture the impact of those categories. Feel free to experiment away!
+
+Among the multi-level categorical attributes, native country attribute has the largest number of levels -- several folds higher than any other attribute in this dataset -- some of which have relatively few observations.  This associated increase in dimensionality of the data may not be accompanied by a corresponding gain of resolution -- e.g. would we expect this data to support the *difference* in income between descendants from Peru and Nicaragua, for example, or from Cambodia and Laos?  Please feel free to evaluate the impact of inclusion and/or omission of this attribute in/from the model and/or discretizing it differently (e.g. US/non-US, etc.).
+
+Lastly, the size of this dataset can make some of the modeling techniques run slower than what we were typically encountering in this class.  You may find it helpful to do some of the exploration and model tuning on multiple random samples of smaller size as you decide on useful ranges of parameters/modeling choices, and then only perform a final run of fully debugged and working code on the full dataset.
+
+```{r one}
+#Prepare the data
+# combine both the datasets 
+setwd("/Users/RaviRani/Documents/Harvard-Extension/CSCI E-63/finalexam")
+traindata<-read.table("adult.data.1",sep=",",header=FALSE,quote="",stringsAsFactors=TRUE)
+ncol(traindata)
+colnames(traindata) <- c("age","workclass","fnlwgt","education","education_num","marital_status","occupation","relationship","race","sex","capital_gain","capital_loss","hours_per_week","native_country","salary")
+testdata<-read.table("adult.test",sep=",",header=FALSE,quote="",stringsAsFactors=TRUE)
+colnames(testdata) <- c("age","workclass","fnlwgt","education","education_num","marital_status","occupation","relationship","race","sex","capital_gain","capital_loss","hours_per_week","native_country","salary")
+ncol(testdata)
+
+testdata$salary = ifelse(grepl("( <=50K.)",testdata$salary)," <=50K"," >50K")
+#testdata$salary[testdata$salary == " <=50K."]<-" <=50K"
+#testdata[salary == " >50K."]=" >50K"
+
+#head(traindata)
+#head(testdata)
+# remove 'final weight' attribute
+merged.data <- rbind(traindata[,-3], testdata[,-3])
+table(merged.data$salary)
+nrow(traindata)
+nrow(testdata)
+nrow(merged.data)
+class(merged.data)
+head(merged.data)
+merged.data[merged.data == " ?"]=NA
+merged.data$native_country<-factor(merged.data$native_country)
+merged.data$workclass<-factor(merged.data$workclass)
+merged.data$occupation<-factor(merged.data$occupation)
+merged.data$occupation<-factor(merged.data$occupation)
+
+
+
+#class(salary)
+#attach(merged.data)
+
+# after removing "?" with NA
+head(merged.data)
+
+# remove rows with NA's - we will be using this data set for our calculations
+noNAData=na.omit(merged.data)
+noNAData$native_country<-factor(noNAData$native_country)
+noNAData$workclass<-factor(noNAData$workclass)
+noNAData$occupation<-factor(noNAData$occupation)
+noNAData$occupation<-factor(noNAData$occupation)
+
+#Normalize the numeric variables 
+num.vars <- sapply(noNAData, is.numeric)
+noNAData[num.vars] <- lapply(noNAData[num.vars], scale)
+
+missmap(noNAData, main = "Missing values vs observed")
+
+attach(noNAData)
+
+is.factor(workclass)
+is.factor(race)
+is.factor(sex)
+is.factor(marital_status)
+is.factor(occupation)
+is.factor(education)
+is.factor(relationship)
+
+
+contrasts(workclass)
+contrasts(race)
+contrasts(sex)
+contrasts(marital_status)
+contrasts(occupation)
+contrasts(education)
+contrasts(relationship)
+
+
+# Take a back up
+noNAData.bk<-noNAData
+#data frame with factors converted into numeric
+noNAData.num<-noNAData
+noNAData.num[,'workclass']=as.numeric(as.integer(as.factor(noNAData[,'workclass'])))
+noNAData.num[,'education']=as.numeric(as.integer(as.factor(noNAData[,'education'])))
+noNAData.num[,'marital_status']=as.numeric(as.integer(as.factor(noNAData[,'marital_status'])))
+noNAData.num[,'occupation']=as.numeric(as.integer(as.factor(noNAData[,'occupation'])))
+noNAData.num[,'relationship']=as.numeric(as.integer(as.factor(noNAData[,'relationship'])))
+noNAData.num[,'race']=as.numeric(as.character(as.integer(noNAData[,'race'])))
+noNAData.num[,'sex']=as.numeric(as.character(as.integer(noNAData[,'sex'])))
+noNAData.num[,'native_country']=as.numeric(as.integer(as.factor(noNAData[,'native_country'])))
+
+```
+
+***
+
+The above code prepares the data for analysis below. first we read data from both data sets adult.data and adult.test . then the data is merged to a data frame. Then NA's are removed from the data. Then the fnlwgt column is removed based on the preface comments.
+The a test is made to check whether there are any empty values in the data frame.
+
+
+***
+
+# Problem 1: univariate and unsupervised analysis (20 points)
+
+Download and read "Census Income" data into R and prepare graphical and numerical summaries of it: e.g. histograms of continuous attributes, contingency tables of categorical variables, scatterplots of continuous attributes with some of the categorical variables indicated by color/symbol shape, etc.  Perform principal components analysis of this data (do you need to scale it prior to that? how would you represent multilevel categorical attributes to be used as inputs for PCA?) and plot observations in the space of the first few principal components with subjects' gender and/or categorized income indicated by color/shape of the symbol.  Perform univariate assessment of associations between outcome we will be modeling and each of the attributes (e.g. t-test or logistic regression for continuous attributes, contingency tables/Fisher exact test/$\chi^2$ test for categorical attributes).  Summarize your observations from these assessments: does it appear that there is association between outcome and predictors? Which predictors seem to be more/less relevant?
+
+***
+The continous attributes are:
+**age,education-num,capital-gain,capital-loss,and hours-per-week**
+ and categorical attributes are:
+ **workclass,education,marital-status,occupation,relationship,race,sex,and native-country**
+
+Now we will draw histograms of continuous attributes, contingency tables of categorical variables.
+
+***
+
+```{r two}
+# analyze raw data
+
+qplot(age, geom="histogram",na.rm = TRUE) 
+qplot(education_num, geom="histogram",na.rm = TRUE) 
+qplot(capital_gain, geom="histogram",na.rm = TRUE) 
+qplot(capital_loss, geom="histogram",na.rm = TRUE) 
+qplot(hours_per_week, geom="histogram",na.rm = TRUE) 
+
+```
+
+***
+The histogram plots above of continous attributes tells that the **age** is  in the range of 5 to 90 years. The capital gain and capital loss are 0 in most cases.Most of the people work 40 hours in a week.
+Now we will do contingency table for categorical attributes.
+
+***
+
+```{r three}
+table(sex)
+table(education)
+table(workclass)
+table(marital_status)
+table(occupation)
+table(relationship)
+table(race)
+
+```
+***
+
+The above contingency table shows the distribution of number of observations across various categories.
+Next we will do the scatter plots of some continous attributes with categorical attributes
+
+***
+
+```{r four}
+# The following scatterplot will do the plot of education and education_num
+
+ggplot(merged.data, aes(x=education, y=education_num, shape=education, color=sex)) +
+  geom_point()+scale_shape_manual(values=seq(0,15))
+
+# The following scatterplot will do the plot of hours_per_week and education_num
+ggplot(merged.data, aes(x=education_num, y=hours_per_week, color=education)) +
+  geom_point()
+
+# The following scatterplot will do the plot of hours_per_week and marital_status
+ggplot(merged.data, aes(x=marital_status, y=hours_per_week, color=marital_status)) +
+  geom_point()
+
+# The following scatterplot will do the plot of capital_gain and education categorized by sex
+ggplot(merged.data, aes(x=capital_gain, y=education, color=sex)) +
+  geom_point()
+
+# The regression model doen below will show the correlation between the response variable with the independent variable(s)
+#summary(lm(as.numeric(salary)~.,data=merged.data,na.action=na.omit))
+
+```
+
+```{r five ,warning=FALSE,fig.width=15,fig.height=8}
+#outModel<-model.matrix(~ sex + education+workclass, data=merged.data, contrasts.arg=list(sex=diag(nlevels(sex)), education=diag(nlevels(education)),workclass=diag(nlevels(workclass)),marital_status=diag(nlevels(marital_status)),occupation=diag(nlevels(occupation)),relationship=diag(nlevels(relationship)),race=diag(nlevels(race)),native_country=diag(nlevels(native_country))))
+#PCA rendition of untransformed data
+modelOut<-model.matrix(salary ~ ., data = merged.data)
+
+pca.out<-prcomp(modelOut[ , apply(modelOut, 2, var) != 0],na.rm = TRUE,scale=T)
+#pca.out<-prcomp(model.matrix(salary ~ ., data = merged.data),na.rm = TRUE)
+#pca.out
+#center and scale refers to respective mean and standard deviation of the variables that are used for normalization prior to implementing PCA
+
+#outputs the mean of variables
+#pca.out$center
+
+#outputs the standard deviation of variables
+#pca.out$scale
+
+#rotation measure provides the principal component loading. Each column of rotation matrix contains the principal component loading vector.
+#pca.out$rotation
+
+#compute the principal component score vector
+dim(pca.out$x)
+
+biplot(pca.out, scale = 0)
+
+# plot of PCA results  for PC1 & PC2
+plot(pca.out$x[,1:2])
+
+#Attributes of  PC1  in decreasing order
+sort(pca.out$rotation[,1]^2,decreasing=TRUE,n=10)
+
+#Attributes of  PC2  in decreasing order
+sort(pca.out$rotation[,2]^2,decreasing=TRUE,n=10)
+
+
+#plot observations in the space of the first few principal components with gender
+plot(pca.out$x[,1:2],col=c("red","blue")[as.numeric(factor(merged.data$sex))],pch=as.numeric(factor(merged.data$sex)))
+legend("topleft",c("male","female"),pch=1:2,col=c("red","blue"),text.col=c("red","blue"))
+
+
+#plot observations in the space of the first few principal components with salary
+plot(pca.out$x[,1:2],col=c("red","blue")[as.numeric(factor(merged.data$salary))],pch=as.numeric(factor(merged.data$salary)))
+legend("topleft",c(">50","<=50"),pch=1:2,col=c("red","blue"),text.col=c("red","blue"))
+
+```
+
+***
+We have used categorical attributes such as education,sex,marital_status etc. by converting them to a dummy variable which  is a commonly used method for converting a categorical input variable into a continuous variable.
+
+ From the above informtion we can say that in case of PC1  the following are given more weightage . Only top 5 attributes are being taken.
+##              marital_status Married-civ-spouse 
+##                        0.1240342595329029 
+##              marital_status Never-married 
+##                        0.0963338001137464 
+##                             education_num 
+##                        0.0868846794820760 
+##                                       age 
+##                        0.0648261074083941 
+##                    relationship Own-child 
+##                        0.0613575294742202 
+ 
+From the above informtion we can say that in case of PC2  the following are given more weightage.Only top 5 attributes are being taken.
+##                            education_num 
+##                            0.158821224938 
+##         marital_status Married-civ-spouse 
+##                            0.084666722129 
+##              marital_status Never-married 
+##                            0.074427479156 
+##                                  sex Male 
+##                            0.056009351029 
+##              native_country United-States 
+##                            0.051630899464  
+ 
+ This tells that significant attributes which could effect salary are :
+ **arital_status Married-civ-spouse, marital_status Never-married  and education_num**.
+***
+
+# Problem 2: logistic regression (25 points)
+
+Develop logistic regression model of the outcome as a function of multiple predictors in the model.  Which variables are significantly associated with the outcome?  Test model performance on multiple splits of data into training and test subsets, summarize it in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
+
+```{r six ,warning=FALSE,fig.width=15,fig.height=8}
+# logistic regression on whole data
+glm.fit=glm(salary~.,data=noNAData,control=glm.control(epsilon = 1e-8, maxit = 50, trace = FALSE),family=binomial)
+summary(glm.fit)
+
+# Calculating predictions
+Z=predict(glm.fit,type="response")
+#assuming we are predicting "1" as <=50K and "0" as >50K.
+Z=ifelse(Z >.5,"1","2")
+
+# drawing contingency tabe with the prediction vs real values
+tbl<-table(Z,glm.fit$model$salary)
+tbl
+
+```
+
+***
+Based on the regression summary above Significant variables associated with the outcome are :
+
+*age - positively associated
+
+*workclass Self-emp-not-inc - negatively associated
+
+*education Bachelors - positively associated
+
+*education Doctorate - positively associated
+
+*education Masters  - positively associated
+
+*education Prof-school  - positively associated
+
+*occupation Exec-managerial - positively associated
+
+*occupation Tech-support - positively associated
+
+*relationship Wife  - positively associated
+
+*sex Male - positively associated
+
+*capital Gain  -  positively associated
+
+*capital Loss - positively associated
+
+
+***
+
+```{r ,warning=FALSE}
+# recode level with  for salary column
+levels(noNAData$salary)
+
+adult.cmplt<- noNAData
+
+errorLM<-numeric(100)
+
+sensitivityLM<-numeric(100)
+specificityLM<-numeric(100)
+for ( iTry in 1:100 ) {
+# Building the prediction model
+ratio = sample(1:nrow(adult.cmplt), size = 0.25*nrow(adult.cmplt))
+test.data = adult.cmplt[ratio,] #Test dataset 25% of total
+train.data = adult.cmplt[-ratio,] #Train dataset 75% of total
+
+dim(train.data)
+dim(test.data)
+str(train.data)
+# Logistic Regression Model
+glm.fit<- glm(salary~., family=binomial(link='logit'),data = train.data)
+
+glm.fit$xlevels[["native_country"]]<-union(glm.fit$xlevels[["native_country"]],levels(test.data$native_country))
+#summary(glm.fit) 
+
+glm.pred<- predict(glm.fit, test.data, type = "response")
+
+#hist(glm.pred, breaks=20)
+#hist(glm.pred[test.data$salary], col="red", breaks=20, add=TRUE)
+
+# check classification performance
+tabl<-table(actual= test.data$salary, predicted= glm.pred>0.5)
+
+dimnames(tabl)[[2]] = c(" <=50K"," >50K")
+
+cm<-confusionMatrix(tabl)
+sensitivityLM[iTry]<-cm$byClass['Sensitivity']
+specificityLM[iTry]<-cm$byClass['Specificity']
+overall <- cm$overall
+overall.accuracy <- overall['Accuracy'] 
+errorLM[iTry]<-1-overall.accuracy
+}
+
+mean(sensitivityLM)
+mean(specificityLM)
+mean(errorLM)
+```
+
+***
+
+After splitting data multiple times with training and test the logistic regression shows that the sensitivity is around 88%. specificity is 73% and accuracy is 85%.
+
+Comparison with RandomForect and SVM is below in subproblem 5 below.
+
+***
+
+# Problem 3: random forest (25 points)
+
+Develop random forest model of the categorized income. Present variable importance plots and comment on relative importance of different attributes in the model.  Did attributes showing up as more important in random forest model also appear as significantly associated with the outcome by logistic regression?  Test model performance on multiple splits of data into training and test subsets, compare test and out-of-bag error estimates, summarize model performance in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
+
+```{r seven}
+
+# Random forest on whole data
+rfOutput <- randomForest(factor(salary)~.,  importance=TRUE,data=noNAData)
+# variable(s) importance plot
+varImpPlot(rfOutput)
+
+plot(rfOutput)
+legend("top", colnames(rfOutput$err.rate),col=1:6,cex=0.8,fill=1:6)
+
+```
+
+```{r eight}
+# test model performance with Random forest 
+errorRF<-numeric(100)
+errorRFmTry<-numeric(100)
+sensitivityRF<-numeric(100)
+specificityRF<-numeric(100)
+# put all these in a loop
+for ( iTry in 1:100 ) {
+bTrain <- sample(c(FALSE,TRUE),nrow(noNAData),replace=TRUE)
+
+rfRes <- randomForest(factor(salary)~.,  importance=TRUE,data=noNAData[bTrain,])
+rfTbl <- table(factor(noNAData[!bTrain,]$salary),predict(rfRes,newdata=noNAData[!bTrain,]))
+
+rfResmTRy <- randomForest(factor(salary)~.,  importance=TRUE,data=noNAData[bTrain,],mtry=5)
+rfTblmTry <- table(factor(noNAData[!bTrain,]$salary),predict(rfResmTRy,newdata=noNAData[!bTrain,]))
+
+cm<-confusionMatrix(rfTbl)
+cmmTRy<-confusionMatrix(rfTblmTry)
+sensitivityRF[iTry]<-cm$byClass['Sensitivity']
+specificityRF[iTry]<-cm$byClass['Specificity']
+overall <- cm$overall
+overall.accuracy <- overall['Accuracy'] 
+errorRF[iTry]<-1-overall.accuracy
+
+overall1 <- cm$overall
+overall.accuracy1 <- overall1['Accuracy'] 
+errorRFmTry[iTry]<-1-overall.accuracy1
+
+#cm
+}
+mean(sensitivityRF)
+mean(specificityRF)
+mean(errorRF)
+mean(errorRFmTry)
+
+
+```
+
+***
+Variable Importance plots show that the **capital_gain,capitol_loss,marital_status** are important. The "MeanDecreaseAccuracy" is the mean decrease of accuracy over all out-of-bag cross validated predictions,
+
+"MeanDecreaseGini"  measures the average gain of purity by splits of a given variable. For this data capital_gain,relationship, and age.
+
+The rfOutput shows that class <=50K OOB and >50K behave the same way around 50 decision trees.
+
+After splitting data multiple times with training and test the Random Forest shows that the sensitivity is around 81%. specificity is 96% and accuracy is 82%.
+
+Comparison with Logistic Regression and SVM is below in subproblem 5 below.
+
+***
+
+# Problem 4: SVM (25 points)
+
+Develop SVM model of this data choosing parameters (e.g. choice of kernel, cost, etc.) that appear to yield better performance.  Test model performance on multiple splits of data into training and test subsets, summarize model performance in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
+
+```{r nine}
+# run tuning on SVM on the whole data once to get optimal values of cost & gamma
+# working on a subset as the whole data is taking a lot of time
+tune.out=tune(svm,as.factor(salary) ~ .,data=noNAData,kernel="radial",ranges=list(cost=c( 1,2,5,10,20, 100),gamma=c(0.01,0.02,0.05,0.1,0.2)),scale = FALSE)
+ cValue<-tune.out$best.parameters$cost
+ gValue<-tune.out$best.parameters$gamma 
+ 
+#run the SVM 
+svmfit=svm(as.factor(salary) ~ ., data=noNAData, kernel="radial",cost=cValue,gamma=gValue)
+summary(svmfit)
+
+sensitivitySVM<-numeric(100)
+specificitySVM<-numeric(100)
+errorSVM<-numeric(100)
+smp_size <- floor(0.80 * nrow(noNAData))
+# put all these in a loop
+for ( iTry in 1:100 ) {
+train_ind <- sample(seq_len(nrow(noNAData)), size = smp_size,replace = TRUE)
+train <- noNAData[train_ind, ]
+test <- noNAData[-train_ind, ]
+
+ tune.out=tune(svm,as.factor(salary) ~ .,data=train,kernel="radial",ranges=list(cost=cValue,gamma=gValue),scale = FALSE)
+ bestmod=tune.out$best.model
+ pOut<-predict(bestmod,test[,-14])
+ cValue<-tune.out$best.parameters$cost
+ gValue<-tune.out$best.parameters$gamma
+ tbl<-table(predict=pOut, truth=test[,14])
+ misCal<-1-(tbl[1,1]+tbl[2,2])/sum(tbl)
+ 
+ cm<-confusionMatrix(tbl)
+cmmTRy<-confusionMatrix(rfTblmTry)
+sensitivitySVM[iTry]<-cm$byClass['Sensitivity']
+specificitySVM[iTry]<-cm$byClass['Specificity']
+overall <- cm$overall
+overall.accuracy <- overall['Accuracy'] 
+errorSVM[iTry]<-1-overall.accuracy
+}
+
+
+mean(sensitivitySVM)
+mean(specificitySVM)
+mean(errorSVM)
+
+```
+
+***
+SVM analysis was taking very long time so only 1000 observation are selected 
+
+After splitting data multiple times with training and test the SVM shows that the sensitivity is around 94%. specificity is 58% and accuracy is 85%.
+
+Comparison with Logistic Regression and Random Forest is below in subproblem 5 below.
+***
+
+# Problem 5: compare logistic regression, random forest and SVM model performance (5 points)
+
+Compare performance of the models developed above (logistic regression, random forest, SVM) in terms of their accuracy, error and sensitivity/specificity.  Comment on differences and similarities between them.
+
+```{r ten}
+#boxplots
+#Sensitivity  box plots on RF,SVM,LR models
+boxplot(list(LG=sensitivityLM,RF=sensitivityRF,SVM=sensitivitySVM))
+
+
+# Error on RF,SVM,LR  models
+boxplot(list(LG=errorLM,RF=errorSVM,SVM=errorSVM,RFOOB=errorRFmTry))
+
+
+# specificity on RF,SVM,LR  models
+boxplot(list(LG=specificityLM,RF=specificityRF,SVM=specificitySVM))
+```
+
+***
+
+The Box plots above show the comparison of Logistic Regression (LR), Random Forest(RF) and SVM  for error sensitivity,specificity and error.
+
+**Sensitivity**
+
+SVM is more sensitive out of RF and LR followed by LR. RF is the lowest.
+
+**Accuracy**
+
+Random Forest is more accurate than RF,LR and SVM. All the three RF,LR and SVM have almost the same accuracy.
+
+**specificity**
+
+RF has more specificity followed by LR and then SVM
+
+***
+
+# Extra 10 points: KNN model
+
+Develop KNN model for this data, evaluate its performance for different values of $k$ on different splits of the data into training and test and compare it to the performance of other methods reported in the dataset description.  Notice that this dataset includes many categorical variables as well as continuous attributes measured on different scales, so that the distance has to be defined to be meaningful (probably avoiding subtraction of the numerical values of multi-level factors directly or adding differences between untransformed age and capital gain/loss attributes).
+
+
+```{r eleven}
+# KNN cross done after converting categorical variables to numeric
+
+knn.cross <- tune.knn(x = noNAData.num[,-14], y = as.factor(noNAData.num[,14]), k = 1:50,tunecontrol=tune.control(sampling = "cross"), cross=10)
+#Summarize the resampling results set
+summary(knn.cross)
+plot(knn.cross)
+knn.cross$best.parameters
+
+#Resampling using bootstraping on full data set
+knn.boot <- tune.knn(x = noNAData.num[,-14], y = as.factor(noNAData.num[,14]), k = 1:50,tunecontrol=tune.control(sampling = "boot") )
+#Summarize the resampling results set
+summary(knn.boot)
+plot(knn.boot)
+knn.boot$best.parameters
+```
+
+```{r twelve}
+
+#Splitting K values
+smp_size <- floor(0.80 * nrow(noNAData.num))
+train_ind <- sample(seq_len(nrow(noNAData.num)), size = smp_size)
+
+knntrain <- noNAData.num[train_ind, ]
+knntest <- noNAData.num[-train_ind, ]
+
+   misCalk<-vector()
+  kValues<-vector()
+
+  for (x1 in 1:50){
+  knn1.pred <- tune.knn(x = knntrain[,-14],y = as.factor(knntrain[,14]),k = 1:50)
+  kValues[x1]<-knn1.pred$best.parameters
+  knnOutput<- knn(train = knntrain[,-14],test = knntest[,-14],cl = as.factor(knntrain[,14]),k =knn1.pred$best.parameters)
+  knn1Tbl<- table(knnOutput,as.factor(knntest[,14]))
+  misCalk[x1]<-1-(knn1Tbl[1,1]+knn1Tbl[2,2])/sum(knn1Tbl)
+  }
+  #misCalk
+  # Mean of the errors
+  mean(misCalk)
+  plot(x=kValues,y=misCalk)
+```
+
+***
+
+For bootstrap K=26 is the optimal K Value. but for cross validation optimal K value is 19.
+
+After splitting and tuning the K-value several we can see that minimal error is for k=12 & 18.
+
+
+***
+
+# Extra 15 points: variable importance in SVM
+
+SVM does not appear to provide readily available tools for judging relative importance of different attributes in the model.  Please evaluate here an approach similar to that employed by random forest where importance of any given attribute is measured by the decrease in model performance upon randomization of the values for this attribute.
+
+```{r extra15}
+dmy <- dummyVars(" ~ .", data = noNAData, fullRank=T)
+trsf <- data.frame(predict(dmy, newdata = noNAData))
+
+#anyNA(trsf)
+
+#split the data into traning and test
+splitIndex <- sample(nrow(trsf), floor(0.5*nrow(trsf)))
+trainDF <- trsf[ splitIndex,]
+testDF  <- trsf[-splitIndex,]
+
+outcomeName <- 'salary...50K'
+predictorNames <- setdiff(names(trainDF),outcomeName)
+
+
+# transform outcome variable to text as this is required in caret for classification 
+#>50K=TRUE and <=50K=FALSE
+#trainDF[,outcomeName] <- ifelse(trainDF[,outcomeName]==" <=50K",1,2)
+#trainDF[,outcomeName] <- ifelse(trainDF[,outcomeName]==" <=50K","<=50K",">50K")
+#trainDF[,outcomeName] <- ifelse(trainDF[,outcomeName]==" <=50K",1,2)
+# trainDF[,outcomeName] <- ifelse(trainDF[,outcomeName]==0,"lessthan50K","greaterthank50K")
+trainDF[,outcomeName] <- ifelse(trainDF[,outcomeName]==0,"lessthan50K","greaterthank50K")
+testDF[,outcomeName] <- ifelse(testDF[,outcomeName]==0,"lessthan50K","greaterthank50K")
+
+trainDF1=na.omit(trainDF)
+
+#trctrl <- trainControl(method = "repeatedcv", classProbs=TRUE, returnResamp='none',summaryFunction=twoClassSummary,repeats = 3)
+
+#svm.tune <- train(x=trainDF[,predictorNames],y= as.factor(trainDF[,outcomeName]),method = "svmRadial",tuneLength = 10,preProc = c("center","scale"), metric="ROC",trControl=trctrl)
+
+trctrl <- trainControl(method = "repeatedcv",  classProbs =  TRUE,number=10,repeats = 3)
+
+svm.tune <- train(salary...50K~.,data=trainDF,method = "svmRadial",tuneLength = 10,preProc = c("center","scale"),trControl=trctrl)
+
+predictions <- predict(object=svm.tune, testDF[,predictorNames], type='prob')
+```
+
+```{r}
+# This is taken from stackoverflow as provided by the link
+GetROC_AUC = function(probs, true_Y){
+        # AUC approximation
+        # http://stackoverflow.com/questions/4903092/calculate-auc-in-r
+        # ty AGS
+        probsSort = sort(probs, decreasing = TRUE, index.return = TRUE)
+        val = unlist(probsSort$x)
+        idx = unlist(probsSort$ix) 
+        
+        roc_y = true_Y[idx];
+        stack_x = cumsum(roc_y == 1)/sum(roc_y == 1)
+        stack_y = cumsum(roc_y == 2)/sum(roc_y == 2)   
+        
+        auc = sum((stack_x[2:length(roc_y)]-stack_x[1:length(roc_y)-1])*stack_y[2:length(roc_y)])
+        return(auc)
+}
+
+testOutcome <- ifelse(testDF[,outcomeName]=="lessthan50K",1,2)
+refAUC <- GetROC_AUC(predictions[[1]],testOutcome )
+print(paste('AUC score:', refAUC))
+
+```
+
+```{r}
+# Shuffle predictions for variable importance
+AUCShuffle <- NULL
+shuffletimes <- 10
+ 
+featuresMeanAUCs <- c()
+for (feature in predictorNames) {
+        featureAUCs <- c()
+        shuffledData <- testDF[,predictorNames]
+        for (iter in 1:shuffletimes) {
+                shuffledData[,feature]<-sample(shuffledData[,feature],length(shuffledData[,feature]))
+                predictions <- predict(object=svm.tune, shuffledData[,predictorNames], type='prob')
+               featureAUCs <- c(featureAUCs,GetROC_AUC(predictions[[1]], testDF[,outcomeName]))
+        }
+        featuresMeanAUCs <- c(featuresMeanAUCs, mean(featureAUCs < refAUC))
+}
+AUCShuffle <- data.frame('feature'=predictorNames, 'importance'=featuresMeanAUCs)
+AUCShuffle <- AUCShuffle[order(AUCShuffle$importance, decreasing=TRUE),]
+print(AUCShuffle)
+
+
+RocImp <- filterVarImp(x = noNAData.bk[, -ncol(noNAData.bk)], y = noNAData.bk$salary)
+head(RocImp)
+```
+
+***
+In Extra 15 points: variable importance in SVM  subset of data was done to speed up the submission and to reduce the processing time
+
+Also the  Shuffle predictions for variable importance  repetitions are reduced from around 500 to 10 . These could effect the out of important 
+variables.
+
+
+The variable importance algorithinm was adapted from another variable importace steps provided at http://amunategui.github.io/variable-importance-shuffler/
+. To compare i used filterVarImp. 
+
+The important variable list are arranged in decreasing order of importance. 
+
+So we can see that for **SVM** the following are the important variables.
+##1											age         
+## 2                        workclass..Local.gov        
+## 3                          workclass..Private        
+## 4                     workclass..Self.emp.inc        
+## 5                 workclass..Self.emp.not.inc        
+## 6                        workclass..State.gov        
+## 7                      workclass..Without.pay        
+## 8                             education..11th        
+## 9                             education..12th        
+## 10                         education..1st.4th         
+## 11                         education..5th.6th         
+## 12                         education..7th.8th         
+## 13                             education..9th   
+
+
+
+For **Random Forest** the first 5 important variables are :
+capital gain ,capital loss,marital status,occupation and age
+
+The **ROC curves** of important independent variables w.r.t salary (independent variable) are :
+age            
+workclass      
+education      
+education_num  
+marital_status  and occupation  
+***
