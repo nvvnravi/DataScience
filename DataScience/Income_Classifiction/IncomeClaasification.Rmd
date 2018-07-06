@@ -1,5 +1,5 @@
 ---
-title: 'CSCI E-63C: Final Exam'
+title: Income classification
 output:
   html_document:
     toc: yes
@@ -25,7 +25,7 @@ options(warn=-1)
 
 # Preface
 
-For the final exam/project we will develop classification models using several approaches and compare their performance on a new dataset -- so-called "Census Income" from UCI ML.  It is available at UCI ML web site, but so that we are not at the mercy of UCI ML availability, there is also a local copy of it in our website in Canvas as a zip-archive of all associated files.  Among other things, the description for this dataset also presents performance (prediction accuracy) observed by the dataset providers using variety of modeling techniques -- this supplies a context for the errors of the models we will develop here.
+We will develop classification models using several approaches and compare their performance on a new dataset -- so-called "Census Income" from UCI ML.  It is available at UCI ML web site, but so that we are not at the mercy of UCI ML availability, there is also a local copy of it in our website in Canvas as a zip-archive of all associated files.  Among other things, the description for this dataset also presents performance (prediction accuracy) observed by the dataset providers using variety of modeling techniques -- this supplies a context for the errors of the models we will develop here.
 
 Please note that the original data has been split up into training and test subsets, but there doesn't seem to be anything particular about that split, so we might want to pool those two datasets together and split them into training and test as necessary ourselves. As you do that, please check that the attribute levels are consistent between those two files.  For instance, the categorized income levels are indicated using slightly different notation in their training and test data.   By now it should be quite straightforward for you to correct that when you pool them together.
 
@@ -37,7 +37,7 @@ Additionally, several attributes in this dataset are categorical variables with 
 
 Among the multi-level categorical attributes, native country attribute has the largest number of levels -- several folds higher than any other attribute in this dataset -- some of which have relatively few observations.  This associated increase in dimensionality of the data may not be accompanied by a corresponding gain of resolution -- e.g. would we expect this data to support the *difference* in income between descendants from Peru and Nicaragua, for example, or from Cambodia and Laos?  Please feel free to evaluate the impact of inclusion and/or omission of this attribute in/from the model and/or discretizing it differently (e.g. US/non-US, etc.).
 
-Lastly, the size of this dataset can make some of the modeling techniques run slower than what we were typically encountering in this class.  You may find it helpful to do some of the exploration and model tuning on multiple random samples of smaller size as you decide on useful ranges of parameters/modeling choices, and then only perform a final run of fully debugged and working code on the full dataset.
+  You may find it helpful to do some of the exploration and model tuning on multiple random samples of smaller size as you decide on useful ranges of parameters/modeling choices, and then only perform a final run of fully debugged and working code on the full dataset.
 
 ```{r one}
 #Prepare the data
@@ -134,7 +134,7 @@ The a test is made to check whether there are any empty values in the data frame
 
 ***
 
-# Problem 1: univariate and unsupervised analysis (20 points)
+# univariate and unsupervised analysis
 
 Download and read "Census Income" data into R and prepare graphical and numerical summaries of it: e.g. histograms of continuous attributes, contingency tables of categorical variables, scatterplots of continuous attributes with some of the categorical variables indicated by color/symbol shape, etc.  Perform principal components analysis of this data (do you need to scale it prior to that? how would you represent multilevel categorical attributes to be used as inputs for PCA?) and plot observations in the space of the first few principal components with subjects' gender and/or categorized income indicated by color/shape of the symbol.  Perform univariate assessment of associations between outcome we will be modeling and each of the attributes (e.g. t-test or logistic regression for continuous attributes, contingency tables/Fisher exact test/$\chi^2$ test for categorical attributes).  Summarize your observations from these assessments: does it appear that there is association between outcome and predictors? Which predictors seem to be more/less relevant?
 
@@ -281,7 +281,7 @@ From the above informtion we can say that in case of PC2  the following are give
  **arital_status Married-civ-spouse, marital_status Never-married  and education_num**.
 ***
 
-# Problem 2: logistic regression (25 points)
+# logistic regression 
 
 Develop logistic regression model of the outcome as a function of multiple predictors in the model.  Which variables are significantly associated with the outcome?  Test model performance on multiple splits of data into training and test subsets, summarize it in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
 
@@ -387,7 +387,7 @@ Comparison with RandomForect and SVM is below in subproblem 5 below.
 
 ***
 
-# Problem 3: random forest (25 points)
+#  random forest
 
 Develop random forest model of the categorized income. Present variable importance plots and comment on relative importance of different attributes in the model.  Did attributes showing up as more important in random forest model also appear as significantly associated with the outcome by logistic regression?  Test model performance on multiple splits of data into training and test subsets, compare test and out-of-bag error estimates, summarize model performance in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
 
@@ -454,7 +454,7 @@ Comparison with Logistic Regression and SVM is below in subproblem 5 below.
 
 ***
 
-# Problem 4: SVM (25 points)
+# SVM 
 
 Develop SVM model of this data choosing parameters (e.g. choice of kernel, cost, etc.) that appear to yield better performance.  Test model performance on multiple splits of data into training and test subsets, summarize model performance in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
 
@@ -511,7 +511,7 @@ After splitting data multiple times with training and test the SVM shows that th
 Comparison with Logistic Regression and Random Forest is below in subproblem 5 below.
 ***
 
-# Problem 5: compare logistic regression, random forest and SVM model performance (5 points)
+# compare logistic regression, random forest and SVM model performance 
 
 Compare performance of the models developed above (logistic regression, random forest, SVM) in terms of their accuracy, error and sensitivity/specificity.  Comment on differences and similarities between them.
 
@@ -547,7 +547,7 @@ RF has more specificity followed by LR and then SVM
 
 ***
 
-# Extra 10 points: KNN model
+# KNN model
 
 Develop KNN model for this data, evaluate its performance for different values of $k$ on different splits of the data into training and test and compare it to the performance of other methods reported in the dataset description.  Notice that this dataset includes many categorical variables as well as continuous attributes measured on different scales, so that the distance has to be defined to be meaningful (probably avoiding subtraction of the numerical values of multi-level factors directly or adding differences between untransformed age and capital gain/loss attributes).
 
@@ -603,7 +603,7 @@ After splitting and tuning the K-value several we can see that minimal error is 
 
 ***
 
-# Extra 15 points: variable importance in SVM
+# variable importance in SVM
 
 SVM does not appear to provide readily available tools for judging relative importance of different attributes in the model.  Please evaluate here an approach similar to that employed by random forest where importance of any given attribute is measured by the decrease in model performance upon randomization of the values for this attribute.
 
