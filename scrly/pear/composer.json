@@ -1,0 +1,13 @@
+{
+    "require": {
+        "sabre/dav": "*",
+        "slim/slim": "^3.0",
+	"erusev/parsedown": "*",
+	"pear/log": "*",
+	"pear/mail": "*",
+	"pear/mail_mime": "*",
+	"pear/net_smtp": "*",
+	"pear/auth_sasl": "*",
+	"pear/db": "*"
+    }
+}

@@ -1,0 +1,50 @@
+Conversion to pdf
+=================
+
+text/plain
+text/csv
+application/vnd.oasis.opendocument.text
+application/msword
+application/vnd.wordperfect
+application/rtf
+  unoconv -d document -f pdf --stdout -v '%f' > '%o'
+
+image/png
+image/jpg
+image/jpeg
+  convert -f pdf -density 300 '%f' '%o'
+
+application/vnd.ms-powerpoint
+application/vnd.openxmlformats-officedocument.presentationml.presentation
+  unoconv -d presentation -f pdf --stdout -v '%f' > '%o'
+
+application/vnd.ms-excel
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+  unoconv -d spreadsheet -f pdf --stdout -v '%f' > '%o'
+
+Preview
+========
+
+image/jpg
+image/jpeg
+image/png
+  convert -resize %wx '%f' '%o'
+
+application/pdf
+  gs -dBATCH -dNOPAUSE -sDEVICE=png16m -dPDFFitPage -r72x72 -sOutputFile=- -dFirstPage=1 -dLastPage=1 -q '%f' | convert -resize %wx png:- '%o'
+
+text/plain
+  a2ps -1 -a1 -R -B -o - '%f' | gs -dBATCH -dNOPAUSE -sDEVICE=png16m -dFirstPage=1 -dLastPage=1 -dPDFFitPage -r72x72 -sOutputFile=- -q - | convert -resize %wx png:- '%o'
+
+application/msword
+application/vnd.oasis.opendocument.spreadsheet
+application/vnd.oasis.opendocument.text
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+application/vnd.ms-excel
+application/vnd.openxmlformats-officedocument.wordprocessingml.document
+application/rtf
+application/vnd.ms-powerpoint
+text/csv
+application/vnd.wordperfect
+  /usr/bin/unoconv -d document -e PageRange=1 -f pdf --stdout -v '%f' | gs -dBATCH -dNOPAUSE -sDEVICE=pngalpha -dPDFFitPage -r72x72 -sOutputFile=- -dFirstPage=1 -dLastPage=1 -q - | convert -resize %wx png:- '%o'
+
