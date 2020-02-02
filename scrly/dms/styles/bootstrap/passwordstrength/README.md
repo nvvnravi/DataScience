@@ -1,1 +1,0 @@
-check strength of password
